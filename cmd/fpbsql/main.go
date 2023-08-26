@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"database/sql/driver"
+	"errors"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -77,6 +78,9 @@ func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
 
 func uuidFromStrToBin(u string) (driver.Value, error) {
 	uuidVal, err := uuid.Parse(u)
+	if uuidVal == uuid.Nil {
+	    return nil, errors.New("Parsed UUID is nil")
+	}
 	if err != nil {
 	    return nil, err
 	}
@@ -88,8 +92,8 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
             GameDate string `json:"gameDate"`
 	    Games []struct {
 		ID     string `json:"id"`
-		FavID  string `json:"fav_id"`
-		DogID  string `json:"dog_id"`
+		FavID  string `json:"favorite"`
+		DogID  string `json:"underdog"`
 		Spread float64 `json:"spread"`
 	} `json:"games"`
       }
@@ -109,6 +113,10 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 	defer stmt.Close()
 
 	for _, game := range payload.Games {
+		if len(game.ID) == 0 {
+		    http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
+		    return
+		}
 		binID, err := uuidFromStrToBin(game.ID)
 		if err != nil {
 		    http.Error(w, err.Error(), http.StatusInternalServerError)
