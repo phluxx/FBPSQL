@@ -55,7 +55,7 @@ func main() {
 }
 
 func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, team FROM teams ORDER BY team ASC")
+	rows, err := db.Query("SELECT HEX(id) as id, team FROM teams ORDER BY team ASC")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -117,23 +117,13 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 		    http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
 		    return
 		}
+		log.Printf("Parsing ID: %s", game.ID)
 		binID, err := uuidFromStrToBin(game.ID)
 		if err != nil {
 		    http.Error(w, err.Error(), http.StatusInternalServerError)
 		    return
 		}
-		binFavID, err := uuidFromStrToBin(game.FavID)
-		if err != nil {
-		    http.Error(w, err.Error(), http.StatusInternalServerError)
-		    return
-		}
-		binDogID, err := uuidFromStrToBin(game.DogID)
-		if err!= nil {
-		    http.Error(w, err.Error(), http.StatusInternalServerError)
-		    return
-		}
-
-		_, err = stmt.Exec(binID, binFavID, binDogID, payload.GameDate, game.Spread)
+		_, err = stmt.Exec(binID, game.FavID, game.DogID, payload.GameDate, game.Spread)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
