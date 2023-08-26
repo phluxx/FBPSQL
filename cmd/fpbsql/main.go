@@ -105,7 +105,7 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO games (id, fav_id, dog_id, date, spread) VALUES (?, ?, ?, ?, ?)`)
+	stmt, err := db.Prepare(`INSERT INTO games (id, fav_id, dog_id, date, spread) VALUES (UNHEX(ID), ?, ?, ?, ?)`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
