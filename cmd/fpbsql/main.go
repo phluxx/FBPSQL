@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"crypto/tls"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -27,8 +28,13 @@ func main() {
 		Net:    "tcp",
 		Addr:   os.Getenv("MYSQL_HOST"),
 		DBName: os.Getenv("MYSQL_DATABASE"),
+		AllowNativePasswords: false,
+		TLSConfig: "skip-verify",
 	}
 	var err error
+        mysql.RegisterTLSConfig("skip-verify", &tls.Config{
+                InsecureSkipVerify: true,
+        })
 	db, err = sql.Open("mysql", config.FormatDSN())
 	if err != nil {
 		log.Fatal(err)
