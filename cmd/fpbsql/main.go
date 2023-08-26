@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 type Team struct {
@@ -38,12 +38,15 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
 
-	// Allow CORS for https://pool.ewnix.net
-	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
-	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
-	originsOk := handlers.AllowedOrigins([]string{"https://pool.ewnix.net"})
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"https://pool.ewnix.net"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization"},
+		AllowCredentials: true,
+	})
 
-	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(r)))
+	handler := c.Handler(r)
+	log.Fatal(http.ListenAndServe(":8080",handler))
 }
 
 func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
