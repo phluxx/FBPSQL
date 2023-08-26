@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"database/sql/driver"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	"github.com/google/uuid"
 )
 
 type Team struct {
@@ -73,16 +75,27 @@ func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(teams)
 }
 
+func uuidFromStrToBin(u string) (driver.Value, error) {
+	uuidVal, err := uuid.Parse(u)
+	if err != nil {
+	    return nil, err
+	}
+	return uuidVal[:], nil
+}
+
 func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
-	var gamesData []struct {
+        type payloadData struct {
+            GameDate string `json:"gameDate"`
+	    Games []struct {
 		ID     string `json:"id"`
 		FavID  string `json:"fav_id"`
 		DogID  string `json:"dog_id"`
-		Date   string `json:"date"`
 		Spread float64 `json:"spread"`
-	}
+	} `json:"games"`
+      }
 
-	err := json.NewDecoder(r.Body).Decode(&gamesData)
+        var payload payloadData
+	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -95,8 +108,24 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stmt.Close()
 
-	for _, game := range gamesData {
-		_, err := stmt.Exec(game.ID, game.FavID, game.DogID, game.Date, game.Spread)
+	for _, game := range payload.Games {
+		binID, err := uuidFromStrToBin(game.ID)
+		if err != nil {
+		    http.Error(w, err.Error(), http.StatusInternalServerError)
+		    return
+		}
+		binFavID, err := uuidFromStrToBin(game.FavID)
+		if err != nil {
+		    http.Error(w, err.Error(), http.StatusInternalServerError)
+		    return
+		}
+		binDogID, err := uuidFromStrToBin(game.DogID)
+		if err!= nil {
+		    http.Error(w, err.Error(), http.StatusInternalServerError)
+		    return
+		}
+
+		_, err = stmt.Exec(binID, binFavID, binDogID, payload.GameDate, game.Spread)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
