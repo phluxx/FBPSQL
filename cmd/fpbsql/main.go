@@ -38,6 +38,7 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
+	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -70,5 +71,41 @@ func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teams)
+}
+
+func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
+	var gamesData []struct {
+		ID     string `json:"id"`
+		FavID  string `json:"fav_id"`
+		DogID  string `json:"dog_id"`
+		Date   string `json:"date"`
+		Spread float64 `json:"spread"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&gamesData)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := db.Prepare(`INSERT INTO games (id, fav_id, dog_id, date, spread) VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	for _, game := range gamesData {
+		_, err := stmt.Exec(game.ID, game.FavID, game.DogID, game.Date, game.Spread)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "Games saved successfully!",
+	})
 }
 
