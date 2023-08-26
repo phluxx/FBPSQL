@@ -8,7 +8,6 @@ import (
 	"os"
 	"database/sql/driver"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -44,7 +43,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
 	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
-	r.HandleFunc("/api/checkdate", checkDateHandler)
+	r.HandleFunc("/api/checkdate/{date}", checkDateHandler)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -140,9 +139,10 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkDateHandler(w http.ResponseWriter, r *http.Request) {
-    gameDate := strings.TrimPrefix(r.URL.Path, "/api/checkdate/")
+    vars := mux.Vars(r)
+    gameDate := vars["date"]
     // Let's make sure the dates are valid before we even begin.
-    _, err := time.Parse("2023-01-02", gameDate)
+    _, err := time.Parse("2006-01-02", gameDate)
     if err != nil {
         http.Error(w, "Invalid date format.", http.StatusBadRequest)
         return
