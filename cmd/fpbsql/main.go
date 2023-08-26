@@ -8,6 +8,8 @@ import (
 	"os"
 	"database/sql/driver"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -42,6 +44,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
 	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
+	r.HandleFunc("/api/checkdate/", checkDateHandler)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -136,3 +139,25 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func checkDateHandler(w http.ResponseWriter, r *http.Request) {
+    gameDate := strings.TrimPrefix(r.URL.Path, "/api/checkdate/")
+    // Let's make sure the dates are valid before we even begin.
+    _, err := time.Parse("2023-01-02", gameDate)
+    if err != nil {
+        http.Error(w, "Invalid date format.", http.StatusBadRequest)
+        return
+    }
+    // Query the DB
+    var exists bool
+    err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM games WHERE date=?)", gameDate).Scan(&exists)
+    if err != nil {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+      return
+    }
+    response := map[string]bool{
+      "gamesExist": exists,
+    }
+    // Send the response
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+  }
