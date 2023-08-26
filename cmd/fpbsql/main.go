@@ -44,7 +44,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
 	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
-	r.HandleFunc("/api/checkdate/", checkDateHandler)
+	r.HandleFunc("/api/checkdate", checkDateHandler)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
