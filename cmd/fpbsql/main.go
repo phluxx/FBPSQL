@@ -35,6 +35,13 @@ type gameData struct {
 	Spread float64 `json:"spread"`
 }
 
+type matchData struct {
+	ID     string  `json:"id"`
+	FavID  string  `json:"favorite"`
+	DogID  string  `json:"underdog"`
+	Spread float64 `json:"spread"`
+}
+
 var db *sql.DB
 
 func main() {
@@ -59,7 +66,8 @@ func main() {
 	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
 	r.HandleFunc("/api/checkdate/{date}", checkDateHandler)
 	r.HandleFunc("/api/populategames/{date}", populateGamesHandler).Methods("GET")
-	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("POST")
+	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("PUT")
+	r.HandleFunc("/api/matchmaker/{date}", matchMakerHandler).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -212,4 +220,28 @@ func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "Games updated successfully!",
 	})
+}
+
+func matchMakerHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	date := vars["date"]
+
+	rows, err := db.Query("SELECT id, fav_id, dog_id, spread FROM games WHERE date = ?", date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var games []matchData
+	for rows.Next() {
+		var match matchData
+		err = rows.Scan(&match.ID, &match.FavID, &match.DogID, &match.Spread)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		games = append(games, match)
+	}
+	json.NewEncoder(w).Encode(games)
 }
