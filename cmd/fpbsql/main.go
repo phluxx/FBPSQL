@@ -21,6 +21,23 @@ type Team struct {
 	Name string `json:"team"`
 }
 
+type payloadData struct {
+	GameDate string `json:"gameDate"`
+	Games    []struct {
+		ID     string  `json:"id"`
+		FavID  string  `json:"favorite"`
+		DogID  string  `json:"underdog"`
+		Spread float64 `json:"spread"`
+	} `json:"games"`
+}
+
+type gameData struct {
+	ID     string  `json:"id"`
+	FavID  string  `json:"favorite"`
+	DogID  string  `json:"underdog"`
+	Spread float64 `json:"spread"`
+}
+
 var db *sql.DB
 
 func main() {
@@ -92,15 +109,6 @@ func uuidFromStrToBin(u string) (driver.Value, error) {
 }
 
 func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
-	type payloadData struct {
-		GameDate string `json:"gameDate"`
-		Games    []struct {
-			ID     string  `json:"id"`
-			FavID  string  `json:"favorite"`
-			DogID  string  `json:"underdog"`
-			Spread float64 `json:"spread"`
-		} `json:"games"`
-	}
 
 	var payload payloadData
 	err := json.NewDecoder(r.Body).Decode(&payload)
@@ -151,9 +159,9 @@ func populateGamesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var games []payloadData
+	var games []gameData
 	for rows.Next() {
-		var game payloadData
+		var game gameData
 		err = rows.Scan(&game.ID, &game.FavID, &game.DogID, &game.Spread)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -189,15 +197,6 @@ func checkDateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
-	type payloadData struct {
-		GameDate string `json:"gameDate"`
-		Games    []struct {
-			ID     string  `json:"id"`
-			FavID  string  `json:"favorite"`
-			DogID  string  `json:"underdog"`
-			Spread float64 `json:"spread"`
-		} `json:"games"`
-	}
 
 	var payload payloadData
 	err := json.NewDecoder(r.Body).Decode(&payload)
@@ -206,7 +205,8 @@ func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, err := db.Prepare(`UPDATE games SET fav_id = UNHEX(?), dog_id = UNHEX(?), spread = ? WHERE id = ? AND date = ?`)
+	// The SQL statement is modified to UPDATE the games based on the game's UUID.
+	stmt, err := db.Prepare(`UPDATE games SET fav_id = UNHEX(?), dog_id = UNHEX(?), date = ?, spread = ? WHERE id = ?`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -214,12 +214,18 @@ func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
 	defer stmt.Close()
 
 	for _, game := range payload.Games {
+		if len(game.ID) == 0 {
+			http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
+			return
+		}
+		log.Printf("Updating ID: %s", game.ID)
 		binID, err := uuidFromStrToBin(game.ID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		_, err = stmt.Exec(game.FavID, game.DogID, game.Spread, binID, payload.GameDate)
+		// The order of values in Exec() corresponds to the order of placeholders in the SQL statement.
+		_, err = stmt.Exec(game.FavID, game.DogID, payload.GameDate, game.Spread, binID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
