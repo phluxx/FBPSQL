@@ -76,7 +76,7 @@ func main() {
 }
 
 func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT HEX(id) as id, team FROM teams ORDER BY team ASC")
+	rows, err := db.Query("SELECT id, team FROM teams ORDER BY team ASC")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -117,7 +117,7 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO games (id, fav_id, dog_id, date, spread) VALUES (?, UNHEX(?), UNHEX(?), ?, ?)`)
+	stmt, err := db.Prepare(`INSERT INTO games (id, fav_id, dog_id, date, spread) VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -206,7 +206,7 @@ func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The SQL statement is modified to UPDATE the games based on the game's UUID.
-	stmt, err := db.Prepare(`UPDATE games SET fav_id = UNHEX(?), dog_id = UNHEX(?), date = ?, spread = ? WHERE id = ?`)
+	stmt, err := db.Prepare(`UPDATE games SET fav_id = ?, dog_id = ?, date = ?, spread = ? WHERE id = ?`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
