@@ -2,18 +2,18 @@ package main
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
-	"database/sql/driver"
-	"errors"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/google/uuid"
 )
 
 type Team struct {
@@ -26,11 +26,11 @@ var db *sql.DB
 func main() {
 	// MySQL Database setup
 	config := mysql.Config{
-		User:   os.Getenv("MYSQL_USER"),
-		Passwd: os.Getenv("MYSQL_PASSWORD"),
-		Net:    "tcp",
-		Addr:   os.Getenv("MYSQL_HOST"),
-		DBName: os.Getenv("MYSQL_DATABASE"),
+		User:                 os.Getenv("MYSQL_USER"),
+		Passwd:               os.Getenv("MYSQL_PASSWORD"),
+		Net:                  "tcp",
+		Addr:                 os.Getenv("MYSQL_HOST"),
+		DBName:               os.Getenv("MYSQL_DATABASE"),
 		AllowNativePasswords: true,
 	}
 	var err error
@@ -44,6 +44,8 @@ func main() {
 	r.HandleFunc("/api/populateteams", populateTeamsHandler).Methods("GET")
 	r.HandleFunc("/api/savegames", saveGamesHandler).Methods("POST")
 	r.HandleFunc("/api/checkdate/{date}", checkDateHandler)
+	r.HandleFunc("/api/populategames/{date}", populateGamesHandler).Methods("GET")
+	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -53,7 +55,7 @@ func main() {
 	})
 
 	handler := c.Handler(r)
-	log.Fatal(http.ListenAndServe(":8080",handler))
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
 
 func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
@@ -81,26 +83,26 @@ func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
 func uuidFromStrToBin(u string) (driver.Value, error) {
 	uuidVal, err := uuid.Parse(u)
 	if uuidVal == uuid.Nil {
-	    return nil, errors.New("Parsed UUID is nil")
+		return nil, errors.New("Parsed UUID is nil")
 	}
 	if err != nil {
-	    return nil, err
+		return nil, err
 	}
 	return uuidVal[:], nil
 }
 
 func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
-        type payloadData struct {
-            GameDate string `json:"gameDate"`
-	    Games []struct {
-		ID     string `json:"id"`
-		FavID  string `json:"favorite"`
-		DogID  string `json:"underdog"`
-		Spread float64 `json:"spread"`
-	} `json:"games"`
-      }
+	type payloadData struct {
+		GameDate string `json:"gameDate"`
+		Games    []struct {
+			ID     string  `json:"id"`
+			FavID  string  `json:"favorite"`
+			DogID  string  `json:"underdog"`
+			Spread float64 `json:"spread"`
+		} `json:"games"`
+	}
 
-        var payload payloadData
+	var payload payloadData
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -116,14 +118,14 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, game := range payload.Games {
 		if len(game.ID) == 0 {
-		    http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
-		    return
+			http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
+			return
 		}
 		log.Printf("Parsing ID: %s", game.ID)
 		binID, err := uuidFromStrToBin(game.ID)
 		if err != nil {
-		    http.Error(w, err.Error(), http.StatusInternalServerError)
-		    return
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		_, err = stmt.Exec(binID, game.FavID, game.DogID, payload.GameDate, game.Spread)
 		if err != nil {
@@ -138,26 +140,94 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func populateGamesHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	date := vars["date"]
+
+	rows, err := db.Query("SELECT id, fav_id, dog_id, spread FROM games WHERE date = ?", date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var games []payloadData
+	for rows.Next() {
+		var game payloadData
+		err = rows.Scan(&game.ID, &game.FavID, &game.DogID, &game.Spread)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		games = append(games, game)
+	}
+	json.NewEncoder(w).Encode(games)
+}
+
 func checkDateHandler(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    gameDate := vars["date"]
-    // Let's make sure the dates are valid before we even begin.
-    _, err := time.Parse("2006-01-02", gameDate)
-    if err != nil {
-        http.Error(w, "Invalid date format.", http.StatusBadRequest)
-        return
-    }
-    // Query the DB
-    var exists bool
-    err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM games WHERE date=?)", gameDate).Scan(&exists)
-    if err != nil {
-      http.Error(w, err.Error(), http.StatusInternalServerError)
-      return
-    }
-    response := map[string]bool{
-      "gamesExist": exists,
-    }
-    // Send the response
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
-  }
+	vars := mux.Vars(r)
+	gameDate := vars["date"]
+	// Let's make sure the dates are valid before we even begin.
+	_, err := time.Parse("2006-01-02", gameDate)
+	if err != nil {
+		http.Error(w, "Invalid date format.", http.StatusBadRequest)
+		return
+	}
+	// Query the DB
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM games WHERE date=?)", gameDate).Scan(&exists)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response := map[string]bool{
+		"gamesExist": exists,
+	}
+	// Send the response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
+	type payloadData struct {
+		GameDate string `json:"gameDate"`
+		Games    []struct {
+			ID     string  `json:"id"`
+			FavID  string  `json:"favorite"`
+			DogID  string  `json:"underdog"`
+			Spread float64 `json:"spread"`
+		} `json:"games"`
+	}
+
+	var payload payloadData
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := db.Prepare(`UPDATE games SET fav_id = UNHEX(?), dog_id = UNHEX(?), spread = ? WHERE id = ? AND date = ?`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	for _, game := range payload.Games {
+		binID, err := uuidFromStrToBin(game.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, err = stmt.Exec(game.FavID, game.DogID, game.Spread, binID, payload.GameDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "Games updated successfully!",
+	})
+}
