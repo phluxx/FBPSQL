@@ -2,16 +2,13 @@ package main
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -97,17 +94,6 @@ func populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(teams)
 }
 
-func uuidFromStrToBin(u string) (driver.Value, error) {
-	uuidVal, err := uuid.Parse(u)
-	if uuidVal == uuid.Nil {
-		return nil, errors.New("Parsed UUID is nil")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return uuidVal[:], nil
-}
-
 func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 
 	var payload payloadData
@@ -130,12 +116,7 @@ func saveGamesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("Parsing ID: %s", game.ID)
-		binID, err := uuidFromStrToBin(game.ID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		_, err = stmt.Exec(binID, game.FavID, game.DogID, payload.GameDate, game.Spread)
+		_, err = stmt.Exec(game.ID, game.FavID, game.DogID, payload.GameDate, game.Spread)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -219,13 +200,8 @@ func updateGamesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("Updating ID: %s", game.ID)
-		binID, err := uuidFromStrToBin(game.ID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		// The order of values in Exec() corresponds to the order of placeholders in the SQL statement.
-		_, err = stmt.Exec(game.FavID, game.DogID, payload.GameDate, game.Spread, binID)
+		_, err = stmt.Exec(game.FavID, game.DogID, payload.GameDate, game.Spread, game.ID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
