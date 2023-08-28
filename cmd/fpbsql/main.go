@@ -46,6 +46,7 @@ type matchData struct {
 }
 
 type tiebreakerData struct {
+	ID                 string `json:"id"`
 	GameDate           string `json:"gameDate"`
 	TiebreakerQuestion string `json:"tiebreakerQuestion"`
 }
@@ -53,6 +54,11 @@ type tiebreakerData struct {
 type userTiebreakerData struct {
 	GameDate         string `json:"gameDate"`
 	TiebreakerAnswer int    `json:"tiebreakerAnswer"`
+}
+
+type userPickPayload struct {
+	Username string            `json:"username"`
+	Picks    map[string]string `json:"picks"`
 }
 
 var db *sql.DB
@@ -87,6 +93,7 @@ func main() {
 	r.HandleFunc("/api/populategames/{date}", populateGamesHandler).Methods("GET")
 	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("PUT")
 	r.HandleFunc("/api/matchmaker/{date}", matchMakerHandler).Methods("GET")
+	r.HandleFunc("/api/saveuserpicks", saveUserPicksHandler).Methods("POST")
 	r.HandleFunc("/api/savetiebreaker", saveTiebreakerHandler).Methods("POST")
 	r.HandleFunc("/api/saveusertiebreaker", saveUserTiebreakerHandler).Methods("POST")
 	r.HandleFunc("/api/gettiebreaker/{date}", getTiebreakerHandler).Methods("GET")
@@ -337,8 +344,8 @@ func getTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	date := vars["date"]
 
-	var tiebreakerQuestion string
-	err := db.QueryRow("SELECT question FROM tiebreaker WHERE date=?", date).Scan(&tiebreakerQuestion)
+	var id, tiebreakerQuestion string
+	err := db.QueryRow("SELECT id, question FROM tiebreaker WHERE date=?", date).Scan(&id, &tiebreakerQuestion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "No tiebreaker found for the given date", http.StatusNotFound)
@@ -351,6 +358,7 @@ func getTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 	response := tiebreakerData{
 		GameDate:           date,
 		TiebreakerQuestion: tiebreakerQuestion,
+		ID:                 id,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -485,4 +493,38 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	w.Write(jsonData)
+}
+
+func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
+	var payload userPickPayload
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := db.Prepare(`INSERT INTO userpicks (id, username, gameid, pickwinner) VALUES (UUID(), ?, ?, ?)`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	for gameID, teamID := range payload.Picks {
+		if len(gameID) == 0 || len(teamID) == 0 {
+			http.Error(w, "Received an empty UUID for a game.", http.StatusBadRequest)
+			return
+		}
+		log.Printf(" Parsing Game ID: %s with Team ID: %s", gameID, teamID)
+		_, err = stmt.Exec(payload.Username, gameID, teamID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "User picks saved successfully!",
+	})
 }
