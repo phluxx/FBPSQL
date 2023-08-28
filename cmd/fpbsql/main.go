@@ -51,9 +51,10 @@ type tiebreakerData struct {
 	TiebreakerQuestion string `json:"tiebreakerQuestion"`
 }
 
-type userTiebreakerData struct {
-	GameDate         string `json:"gameDate"`
+type userTiebreakerPayload struct {
 	TiebreakerAnswer int    `json:"tiebreakerAnswer"`
+	Username         string `json:"username"`
+	QID              string `json:"qid"`
 }
 
 type userPickPayload struct {
@@ -307,28 +308,27 @@ func saveTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
-	var payload userTiebreakerData
+	var payload userTiebreakerPayload
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var tiebreakerID string
-	err = db.QueryRow("SELECT id FROM tiebreaker WHERE date=?", payload.GameDate).Scan(&tiebreakerID)
-	if err != nil {
-		http.Error(w, "Error fetching tiebreaker ID: "+err.Error(), http.StatusInternalServerError)
+	// Check if the necessary fields are present
+	if payload.Username == "" || payload.QID == "" || payload.TiebreakerAnswer == 0 {
+		http.Error(w, "Missing required fields in payload", http.StatusBadRequest)
 		return
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO usertiebreakers (id, qid, response) VALUES (UUID(), ?, ?)`)
+	stmt, err := db.Prepare(`INSERT INTO usertiebreakers (id, qid, username, response) VALUES (UUID(), ?, ?, ?)`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(tiebreakerID, payload.TiebreakerAnswer)
+	_, err = stmt.Exec(payload.QID, payload.Username, payload.TiebreakerAnswer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -336,7 +336,7 @@ func saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "User tiebreaker saved successfully!",
+		"status": "Tiebreaker saved successfully!",
 	})
 }
 
