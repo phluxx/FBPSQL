@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
