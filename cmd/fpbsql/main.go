@@ -82,7 +82,8 @@ func main() {
 	r.HandleFunc("/api/saveusertiebreaker", saveUserTiebreakerHandler).Methods("POST")
 	r.HandleFunc("/api/gettiebreaker/{date}", getTiebreakerHandler).Methods("GET")
 	r.HandleFunc("/api/isbettingopen", isBettingOpenHandler).Methods("GET")
-	r.HandleFunc("/api/setbettingstatus", setBettingStatusHandler).Methods("POST")
+	r.HandleFunc("/api/openbetting", openBettingHandler).Methods("POST")
+	r.HandleFunc("/api/closebetting", closeBettingHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -371,20 +372,8 @@ func isBettingOpenHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func setBettingStatusHandler(w http.ResponseWriter, r *http.Request) {
-	var payload map[string]bool
-	err := json.NewDecoder(r.Body).Decode(&payload)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	isOpenInt := 0
-	if payload["isBettingOpen"] {
-		isOpenInt = 1
-	}
-
-	_, err = db.Exec("UPDATE config SET value=? WHERE name='isBettingOpen'", isOpenInt)
+func openBettingHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := db.Exec("UPDATE config SET value=1 WHERE name='isBettingOpen'")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -392,6 +381,19 @@ func setBettingStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "Betting status updated successfully!",
+		"status": "Betting opened successfully!",
+	})
+}
+
+func closeBettingHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := db.Exec("UPDATE config SET value=0 WHERE name='isBettingOpen'")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "Betting closed successfully!",
 	})
 }
