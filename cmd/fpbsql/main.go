@@ -42,6 +42,16 @@ type matchData struct {
 	Spread float64 `json:"spread"`
 }
 
+type tiebreakerData struct {
+	GameDate           string `json:"gameDate"`
+	TiebreakerQuestion string `json:"tiebreakerQuestion"`
+}
+
+type userTiebreakerData struct {
+	GameDate         string `json:"gameDate"`
+	TiebreakerAnswer int    `json:"tiebreakerAnswer"`
+}
+
 var db *sql.DB
 
 func main() {
@@ -68,6 +78,8 @@ func main() {
 	r.HandleFunc("/api/populategames/{date}", populateGamesHandler).Methods("GET")
 	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("PUT")
 	r.HandleFunc("/api/matchmaker/{date}", matchMakerHandler).Methods("GET")
+	r.HandleFunc("/api/savetiebreaker", saveTiebreakerHandler).Methods("POST")
+	r.HandleFunc("/api/saveusertiebreaker", saveUserTiebreakerHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -244,4 +256,65 @@ func matchMakerHandler(w http.ResponseWriter, r *http.Request) {
 		games = append(games, match)
 	}
 	json.NewEncoder(w).Encode(games)
+}
+
+func saveTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
+	var payload tiebreakerData
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := db.Prepare(`INSERT INTO tiebreaker (id, question, date) VALUES (UUID(), ?, ?)`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(payload.TiebreakerQuestion, payload.GameDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "Tiebreaker saved successfully!",
+	})
+}
+
+func saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
+	var payload userTiebreakerData
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var tiebreakerID string
+	err = db.QueryRow("SELECT id FROM tiebreaker WHERE date=?", payload.GameDate).Scan(&tiebreakerID)
+	if err != nil {
+		http.Error(w, "Error fetching tiebreaker ID: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	stmt, err := db.Prepare(`INSERT INTO usertiebreakers (id, qid, response) VALUES (UUID(), ?, ?)`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(tiebreakerID, payload.TiebreakerAnswer)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "User tiebreaker saved successfully!",
+	})
 }
