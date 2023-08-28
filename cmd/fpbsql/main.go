@@ -52,7 +52,7 @@ type tiebreakerData struct {
 }
 
 type userTiebreakerPayload struct {
-	TiebreakerAnswer int    `json:"tiebreakerAnswer"`
+	TiebreakerAnswer int    `json:"tiebreaker,string"`
 	Username         string `json:"username"`
 	QID              string `json:"qid"`
 }
