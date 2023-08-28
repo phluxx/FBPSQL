@@ -3,11 +3,14 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -54,6 +57,12 @@ type userTiebreakerData struct {
 
 var db *sql.DB
 
+var jwtSecret = []byte("NTA1OTcxOWRhOTIzOTdiYjRkMDYzNmFjNzA5MzRlNTE3N2I0NTdiMTFiN2E4")
+
+type TokenResponse struct {
+	Token string `json:"token"`
+}
+
 func main() {
 	// MySQL Database setup
 	config := mysql.Config{
@@ -84,6 +93,7 @@ func main() {
 	r.HandleFunc("/api/isbettingopen", isBettingOpenHandler).Methods("GET")
 	r.HandleFunc("/api/openbetting", openBettingHandler).Methods("POST")
 	r.HandleFunc("/api/closebetting", closeBettingHandler).Methods("POST")
+	r.HandleFunc("/api/login", loginHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -396,4 +406,83 @@ func closeBettingHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "Betting closed successfully!",
 	})
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		http.Error(w, "Unable to parse request", http.StatusBadRequest)
+		return
+	}
+
+	// Connect to LDAP
+	l, err := ldap.DialURL("ldap://sso.ewnix.net")
+	if err != nil {
+		http.Error(w, "Failed to connect to the LDAP server", http.StatusInternalServerError)
+		return
+	}
+	defer l.Close()
+
+	// Search the LDAP DB for the user
+
+	searchRequest := ldap.NewSearchRequest(
+		"ou=people,dc=ewnix,dc=net",
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(cn=%s)", creds.Username),
+		[]string{"dn"},
+		nil,
+	)
+
+	sr, err := l.Search(searchRequest)
+	if err != nil || len(sr.Entries) != 1 {
+		http.Error(w, "Failed to find user", http.StatusUnauthorized)
+		return
+	}
+
+	userDN := sr.Entries[0].DN
+
+	// Bind as the user to verify their password
+
+	err = l.Bind(userDN, creds.Password)
+	if err != nil {
+		http.Error(w, "Failed to authenticate user", http.StatusUnauthorized)
+		return
+	}
+
+	// Create the token
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": creds.Username,
+		"nbf":      time.Now().Unix(),
+	})
+
+	// Sign the token
+
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		http.Error(w, "Failed to generate the token", http.StatusInternalServerError)
+		return
+	}
+
+	// Create response
+
+	response := TokenResponse{
+		Token: tokenString,
+	}
+
+	jsonData, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Failed to encode token to JSON", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the token
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(jsonData)
 }
