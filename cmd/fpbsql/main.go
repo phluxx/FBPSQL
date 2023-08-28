@@ -80,6 +80,7 @@ func main() {
 	r.HandleFunc("/api/matchmaker/{date}", matchMakerHandler).Methods("GET")
 	r.HandleFunc("/api/savetiebreaker", saveTiebreakerHandler).Methods("POST")
 	r.HandleFunc("/api/saveusertiebreaker", saveUserTiebreakerHandler).Methods("POST")
+	r.HandleFunc("/api/gettiebreaker/{date}", getTiebreakerHandler).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -317,4 +318,28 @@ func saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "User tiebreaker saved successfully!",
 	})
+}
+
+func getTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	date := vars["date"]
+
+	var tiebreakerQuestion string
+	err := db.QueryRow("SELECT question FROM tiebreaker WHERE date=?", date).Scan(&tiebreakerQuestion)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "No tiebreaker found for the given date", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+
+	response := tiebreakerData{
+		GameDate:           date,
+		TiebreakerQuestion: tiebreakerQuestion,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
