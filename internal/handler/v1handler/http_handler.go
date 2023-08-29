@@ -37,14 +37,14 @@ func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpHandler) init() {
 	h.r = mux.NewRouter()
-	h.r.HandleFunc("/api/populateteams", h.populateTeamsHandler).Methods("GET")
-	h.r.HandleFunc("/api/savegames", h.saveGamesHandler).Methods("POST")
-	h.r.HandleFunc("/api/populategames/{date}", h.populateGamesHandler).Methods("GET")
-	h.r.HandleFunc("/api/updategames", h.updateGamesHandler).Methods("PUT")
-	h.r.HandleFunc("/api/saveuserpicks", h.saveUserPicksHandler).Methods("POST")
-	h.r.HandleFunc("/api/savetiebreaker", h.saveTiebreakerHandler).Methods("POST")
-	h.r.HandleFunc("/api/saveusertiebreaker", h.saveUserTiebreakerHandler).Methods("POST")
-	h.r.HandleFunc("/api/gettiebreaker/{date}", h.getTiebreakerHandler).Methods("GET")
+	h.r.HandleFunc("/api/teams", h.populateTeamsHandler).Methods("GET")
+	h.r.HandleFunc("/api/tiebreaker/inquiry/{date}", h.getTiebreakerHandler).Methods("GET")
+	h.r.HandleFunc("/api/tiebreaker/inquiry", h.saveTiebreakerHandler).Methods("POST")
+	h.r.HandleFunc("/api/tiebreaker/response", h.saveUserTiebreakerHandler).Methods("POST")
+	h.r.HandleFunc("/api/picks", h.saveUserPicksHandler).Methods("POST")
+	h.r.HandleFunc("/api/games/{date}", h.populateGamesHandler).Methods("GET")
+	h.r.HandleFunc("/api/games", h.updateGamesHandler).Methods("PUT")
+	h.r.HandleFunc("/api/games", h.saveGamesHandler).Methods("POST")
 	h.r.HandleFunc("/api/v1/auth/login", h.loginHandler).Methods("POST")
 	h.r.HandleFunc("/api/v1/auth/register", h.registerHandler).Methods("POST")
 }
