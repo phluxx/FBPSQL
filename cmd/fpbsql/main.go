@@ -571,6 +571,16 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	modifyGroupRequest := ldap.NewModifyRequest("cn=football,ou=groups,dc=ewnix,dc=net", nil)
+	userDN := fmt.Sprintf("cn=%s,ou=people,dc=ewnix,dc=net", creds.Username)
+	modifyGroupRequest.Add("member", []string{userDN})
+
+	err = l.Modify(modifyGroupRequest)
+	if err != nil {
+		http.Error(w, "Failed to add user to group", http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Registration successful"))
 }
