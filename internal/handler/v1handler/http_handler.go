@@ -12,7 +12,7 @@ import (
 	"github.com/phluxx/FBPSQL/pkg/view/v1view"
 
 	"github.com/go-ldap/ldap/v3"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 )
 
@@ -20,6 +20,7 @@ func New(cfg *config.Config, mysql *store.Mysql) *HttpHandler {
 	h := &HttpHandler{
 		config: cfg,
 		mysql:  mysql,
+		auth:   NewAuthMiddleware(cfg),
 	}
 	h.init()
 	return h
@@ -29,6 +30,7 @@ type HttpHandler struct {
 	config *config.Config
 	r      *mux.Router
 	mysql  *store.Mysql
+	auth   *AuthMiddleware
 }
 
 func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,16 +39,20 @@ func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpHandler) init() {
 	h.r = mux.NewRouter()
-	h.r.HandleFunc("/api/populateteams", h.populateTeamsHandler).Methods("GET")
-	h.r.HandleFunc("/api/savegames", h.saveGamesHandler).Methods("POST")
-	h.r.HandleFunc("/api/populategames/{date}", h.populateGamesHandler).Methods("GET")
-	h.r.HandleFunc("/api/updategames", h.updateGamesHandler).Methods("PUT")
-	h.r.HandleFunc("/api/saveuserpicks", h.saveUserPicksHandler).Methods("POST")
-	h.r.HandleFunc("/api/savetiebreaker", h.saveTiebreakerHandler).Methods("POST")
-	h.r.HandleFunc("/api/saveusertiebreaker", h.saveUserTiebreakerHandler).Methods("POST")
-	h.r.HandleFunc("/api/gettiebreaker/{date}", h.getTiebreakerHandler).Methods("GET")
+	authed := h.r.NewRoute().Subrouter()
+
+	h.r.HandleFunc("/api/teams", h.populateTeamsHandler).Methods("GET")
+	h.r.HandleFunc("/api/tiebreaker/inquiry/{date}", h.getTiebreakerHandler).Methods("GET")
+	h.r.HandleFunc("/api/tiebreaker/inquiry", h.saveTiebreakerHandler).Methods("POST")
+	authed.HandleFunc("/api/tiebreaker/response", h.saveUserTiebreakerHandler).Methods("POST")
+	authed.HandleFunc("/api/picks", h.saveUserPicksHandler).Methods("POST")
+	h.r.HandleFunc("/api/games/{date}", h.populateGamesHandler).Methods("GET")
+	h.r.HandleFunc("/api/games", h.updateGamesHandler).Methods("PUT")
+	h.r.HandleFunc("/api/games", h.saveGamesHandler).Methods("POST")
 	h.r.HandleFunc("/api/v1/auth/login", h.loginHandler).Methods("POST")
 	h.r.HandleFunc("/api/v1/auth/register", h.registerHandler).Methods("POST")
+
+	authed.Use(h.auth.Auth)
 }
 
 func (h *HttpHandler) populateTeamsHandler(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +157,7 @@ func (h *HttpHandler) saveTiebreakerHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *HttpHandler) saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
-	var username = r.Header.Get("username") // TODO get from claim
+	var username = r.Header.Get("username")
 	var payload v1request.UserTiebreaker
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
@@ -199,7 +205,7 @@ func (h *HttpHandler) getTiebreakerHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *HttpHandler) saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
-	var username = r.Header.Get("username") // TODO get from claim
+	var username = r.Header.Get("username")
 	var payload v1request.Picks
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
