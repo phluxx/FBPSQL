@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypt"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,8 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
@@ -16,7 +17,6 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/simia-tech/crypt"
 )
 
 type Team struct {
@@ -533,15 +533,23 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func GenerateCRYPT(password string) (string, error) {
-	saltChars := "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	// Generate a two-character salt.
-	salt := string(saltChars[rand.Intn(len(saltChars))]) + string(saltChars[rand.Intn(len(saltChars))])
-	hash, err := crypt.Crypt([]byte(password), []byte(salt))
+func GenerateCrypt(password string) (string, error) {
+	cmd := exec.Command("perl", "-e", "print crypt($ARGV[0], q{$6$} . $ARGV[1])", password, randomSalt())
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	return "{CRYPT}" + hash, nil
+	return strings.TrimSpace(string(out)), nil
+}
+
+func randomSalt() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
+	const length = 16
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(result)
 }
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
@@ -573,7 +581,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate a CRYPT hash
-	hashedPassword, err := GenerateCRYPT(creds.Password)
+	hashedPassword, err := GenerateCrypt(creds.Password)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
