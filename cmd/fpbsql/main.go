@@ -102,6 +102,7 @@ func main() {
 	r.HandleFunc("/api/openbetting", openBettingHandler).Methods("POST")
 	r.HandleFunc("/api/closebetting", closeBettingHandler).Methods("POST")
 	r.HandleFunc("/api/login", loginHandler).Methods("POST")
+	r.HandleFunc("/api/register", registerHandler).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -527,4 +528,49 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "User picks saved successfully!",
 	})
+}
+
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	var creds struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		http.Error(w, "Unable to parse request", http.StatusBadRequest)
+		return
+	}
+
+	l, err := ldap.DialURL("ldap://sso.ewnix.net")
+	if err != nil {
+		http.Error(w, "Failed to connect to the LDAP server", http.StatusInternalServerError)
+		return
+	}
+	defer l.Close()
+
+	// Bind as the admin to add the new user
+	adminPassword := os.Getenv("LDAP_ADMIN_PASSWORD")
+	err = l.Bind("cn=admin,dc=ewnix,dc=net", adminPassword)
+	if err != nil {
+		http.Error(w, "Failed to bind as admin", http.StatusInternalServerError)
+		return
+	}
+
+	addUserRequest := ldap.NewAddRequest(fmt.Sprintf("cn=%s,ou=people,dc=ewnix,dc=net", creds.Username), nil)
+	addUserRequest.Attribute("objectClass", []string{"inetOrgPerson"}) // Assuming you're using inetOrgPerson
+	addUserRequest.Attribute("cn", []string{creds.Username})
+	addUserRequest.Attribute("sn", []string{creds.Username})
+	addUserRequest.Attribute("mail", []string{creds.Email})
+	addUserRequest.Attribute("userPassword", []string{creds.Password})
+
+	err = l.Add(addUserRequest)
+	if err != nil {
+		http.Error(w, "Failed to add user", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Registration successful"))
 }
