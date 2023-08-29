@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypt"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	"github.com/simia-tech/crypt"
 )
 
 type Team struct {
@@ -530,6 +533,17 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func GenerateCRYPT(password string) (string, error) {
+	saltChars := "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	// Generate a two-character salt.
+	salt := string(saltChars[rand.Intn(len(saltChars))]) + string(saltChars[rand.Intn(len(saltChars))])
+	hash, err := crypt.Crypt([]byte(password), []byte(salt))
+	if err != nil {
+		return "", err
+	}
+	return "{CRYPT}" + hash, nil
+}
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Username string `json:"username"`
@@ -558,12 +572,19 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate a CRYPT hash
+	hashedPassword, err := GenerateCRYPT(creds.Password)
+	if err != nil {
+		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		return
+	}
+
 	addUserRequest := ldap.NewAddRequest(fmt.Sprintf("cn=%s,ou=people,dc=ewnix,dc=net", creds.Username), nil)
 	addUserRequest.Attribute("objectClass", []string{"inetOrgPerson"}) // Assuming you're using inetOrgPerson
 	addUserRequest.Attribute("cn", []string{creds.Username})
 	addUserRequest.Attribute("sn", []string{creds.Username})
 	addUserRequest.Attribute("mail", []string{creds.Email})
-	addUserRequest.Attribute("userPassword", []string{creds.Password})
+	addUserRequest.Attribute("userPassword", []string{hashedPassword})
 
 	err = l.Add(addUserRequest)
 	if err != nil {
