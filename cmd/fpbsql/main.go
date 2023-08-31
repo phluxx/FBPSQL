@@ -534,8 +534,7 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GenerateCrypt(password string) (string, error) {
-	salt := randomSalt()
-	hashed, err := crypt.Crypt(password, salt)
+	hashed, err := crypt.Crypt(password, "")
 	if err != nil {
 		return "", err
 	}
@@ -583,7 +582,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate a CRYPT hash
 	hashedPassword, err := GenerateCrypt(creds.Password)
 	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to hash password: %v", err), http.StatusInternalServerError)
 		return
 	}
 
