@@ -16,7 +16,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/simia-tech/crypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Team struct {
@@ -534,12 +534,11 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GenerateCrypt(password string) (string, error) {
-	salt := randomSalt()
-	hashed, err := crypt.Crypt(password, salt)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
-	return "{CRYPT}" + hashed, nil
+	return "{CRYPT}" + string(hashed), nil
 }
 
 func randomSalt() string {
