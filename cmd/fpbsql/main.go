@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	"github.com/simia-tech/crypt"
 )
 
 type Team struct {
@@ -534,12 +534,12 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GenerateCrypt(password string) (string, error) {
-	cmd := exec.Command("perl", "-e", "print crypt($ARGV[0], q{$6$} . $ARGV[1])", password, randomSalt())
-	out, err := cmd.Output()
+	salt := randomSalt()
+	hashed, err := crypt.Crypt(password, salt)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return "{CRYPT}" + hashed, nil
 }
 
 func randomSalt() string {
