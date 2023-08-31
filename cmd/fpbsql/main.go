@@ -534,7 +534,8 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GenerateCrypt(password string) (string, error) {
-	hashed, err := crypt.Crypt(password, "")
+	salt := randomSalt()
+	hashed, err := crypt.Crypt(password, salt)
 	if err != nil {
 		return "", err
 	}
@@ -543,7 +544,7 @@ func GenerateCrypt(password string) (string, error) {
 
 func randomSalt() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
-	const length = 16
+	const length = 2
 	result := make([]byte, length)
 	for i := range result {
 		result[i] = charset[rand.Intn(len(charset))]
