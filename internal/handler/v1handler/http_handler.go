@@ -44,8 +44,8 @@ func (h *HttpHandler) init() {
 	h.r.HandleFunc("/api/teams", h.populateTeamsHandler).Methods("GET")
 	h.r.HandleFunc("/api/tiebreaker/inquiry/{date}", h.getTiebreakerHandler).Methods("GET")
 	h.r.HandleFunc("/api/tiebreaker/inquiry", h.saveTiebreakerHandler).Methods("POST")
-	authed.HandleFunc("/api/tiebreaker/response", h.saveUserTiebreakerHandler).Methods("POST")
-	authed.HandleFunc("/api/picks", h.saveUserPicksHandler).Methods("POST")
+	authed.HandleFunc("/api/tiebreaker/response", h.saveUserTiebreakerHandler).Methods("PUT")
+	authed.HandleFunc("/api/picks", h.saveUserPicksHandler).Methods("PUT")
 	h.r.HandleFunc("/api/games/{date}", h.populateGamesHandler).Methods("GET")
 	h.r.HandleFunc("/api/games", h.updateGamesHandler).Methods("PUT")
 	h.r.HandleFunc("/api/games", h.saveGamesHandler).Methods("POST")
@@ -61,9 +61,15 @@ func (h *HttpHandler) populateTeamsHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to get teams", http.StatusInternalServerError)
 		return
 	}
-
+	vTeams := make([]v1view.Team, 0, len(teams))
+	for _, team := range teams {
+		vTeams = append(vTeams, v1view.Team{
+			ID:   team.ID,
+			Name: team.Name,
+		})
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(teams)
+	json.NewEncoder(w).Encode(vTeams)
 }
 
 func (h *HttpHandler) saveGamesHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +103,7 @@ func (h *HttpHandler) populateGamesHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	vGames := make([]v1view.Game, len(games))
+	vGames := make([]v1view.Game, 0, len(games))
 
 	for _, game := range games {
 		vGames = append(vGames, v1view.Game{

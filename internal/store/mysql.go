@@ -29,13 +29,14 @@ func (m *Mysql) GetTeams(ctx context.Context) ([]v1model.Team, error) {
 	var teams []v1model.Team
 	for rows.Next() {
 		var team v1model.Team
-		if err := rows.StructScan(&team.ID); err != nil {
+		if err := rows.StructScan(&team); err != nil {
 			return []v1model.Team{}, err
 		}
 		teams = append(teams, team)
 	}
 	return teams, nil
 }
+
 func (m *Mysql) GetGames(ctx context.Context, date string) ([]v1model.Game, error) {
 	rows, err := m.db.QueryxContext(ctx, "SELECT id, fav_id, dog_id, spread FROM games WHERE date = ?", date)
 	if err != nil {
@@ -111,7 +112,7 @@ func (m *Mysql) SaveUserpicks(ctx context.Context, picks v1model.Picks, username
 }
 
 func (m *Mysql) SaveUserTiebreaker(ctx context.Context, tb v1model.UserTiebreaker) error {
-	_, err := m.db.NamedExecContext(ctx, `INSERT INTO usertiebreaker (id, username, qid, response) VALUES (:username, :qid, :response)`, tb)
+	_, err := m.db.NamedExecContext(ctx, `INSERT INTO usertiebreakers (id, qid, username, response) VALUES (UUID(), :qid, :username, :response)`, tb)
 	return err
 }
 
