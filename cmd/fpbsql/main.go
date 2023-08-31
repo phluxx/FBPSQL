@@ -67,7 +67,7 @@ type userPickPayload struct {
 
 var db *sql.DB
 
-var jwtSecret = []byte("NTA1OTcxOWRhOTIzOTdiYjRkMDYzNmFjNzA5MzRlNTE3N2I0NTdiMTFiN2E4")
+var jwtSecret = []byte(os.Getenv("TOKEN_SIGNATURE"))
 
 type TokenResponse struct {
 	Token string `json:"token"`
@@ -97,9 +97,9 @@ func main() {
 	r.HandleFunc("/api/populategames/{date}", populateGamesHandler).Methods("GET")
 	r.HandleFunc("/api/updategames", updateGamesHandler).Methods("PUT")
 	r.HandleFunc("/api/matchmaker/{date}", matchMakerHandler).Methods("GET")
-	r.HandleFunc("/api/saveuserpicks", saveUserPicksHandler).Methods("POST")
+	r.HandleFunc("/api/saveuserpicks", verifyTokenMiddleware(saveUserPicksHandler)).Methods("POST")
 	r.HandleFunc("/api/savetiebreaker", saveTiebreakerHandler).Methods("POST")
-	r.HandleFunc("/api/saveusertiebreaker", saveUserTiebreakerHandler).Methods("POST")
+	r.HandleFunc("/api/saveusertiebreaker", verifyTokenMiddleware(saveUserTiebreakerHandler)).Methods("POST")
 	r.HandleFunc("/api/gettiebreaker/{date}", getTiebreakerHandler).Methods("GET")
 	r.HandleFunc("/api/isbettingopen", isBettingOpenHandler).Methods("GET")
 	r.HandleFunc("/api/openbetting", openBettingHandler).Methods("POST")
@@ -612,4 +612,39 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Registration successful"))
+}
+
+func verifyTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := parts[1]
+
+		// Parse the token string
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// Ensure token method is what we expect
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			}
+			return jwtSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// Continue to the next handler if the token is valid
+		next.ServeHTTP(w, r)
+	}
 }
