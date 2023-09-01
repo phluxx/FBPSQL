@@ -645,7 +645,17 @@ func getUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 	date := vars["nextSaturday"]
 
 	var response userTiebreakerPayload
-	err := db.QueryRow("SELECT qid, username, response FROM usertiebreakers WHERE username=? AND date=?", username, date).Scan(&response.QID, &response.Username, &response.TiebreakerAnswer)
+	err := db.QueryRow(`
+		SELECT 
+		    u.qid, u.username, u.response 
+		FROM 
+		    usertiebreakers u 
+		JOIN 
+		    tiebreaker t ON u.qid = t.id 
+		WHERE 
+		    u.username = ? AND t.date = ?
+	`, username, date).Scan(&response.QID, &response.Username, &response.TiebreakerAnswer)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "No tiebreaker found for the given username and date", http.StatusNotFound)
