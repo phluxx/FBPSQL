@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -106,6 +105,8 @@ func main() {
 	r.HandleFunc("/api/closebetting", closeBettingHandler).Methods("POST")
 	r.HandleFunc("/api/login", loginHandler).Methods("POST")
 	r.HandleFunc("/api/register", registerHandler).Methods("POST")
+	r.HandleFunc("/api/getusertiebreaker/{decodedUsername}/{nextSaturday}", getUserTiebreakerHandler).Methods("GET")
+	r.HandleFunc("/api/getuserpicks/{decodedUsername}/{nextSaturday}", getUserPicksHandler).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -541,16 +542,6 @@ func GenerateCrypt(password string) (string, error) {
 	return "{CRYPT}" + string(hashed), nil
 }
 
-func randomSalt() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
-	const length = 2
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(result)
-}
-
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Username string `json:"username"`
@@ -646,4 +637,52 @@ func verifyTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Continue to the next handler if the token is valid
 		next.ServeHTTP(w, r)
 	}
+}
+
+func getUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["decodedUsername"]
+	date := vars["nextSaturday"]
+
+	var response userTiebreakerPayload
+	err := db.QueryRow("SELECT qid, username, response FROM usertiebreakers WHERE username=? AND date=?", username, date).Scan(&response.QID, &response.Username, &response.TiebreakerAnswer)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "No tiebreaker found for the given username and date", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func getUserPicksHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["decodedUsername"]
+	date := vars["nextSaturday"]
+
+	rows, err := db.Query("SELECT username, gameid, pickwinner FROM userpicks WHERE username=? AND date=?", username, date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var picks userPickPayload
+	picks.Picks = make(map[string]string)
+
+	for rows.Next() {
+		var gameID, pickWinner string
+		if err := rows.Scan(&picks.Username, &gameID, &pickWinner); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		picks.Picks[gameID] = pickWinner
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(picks)
 }
