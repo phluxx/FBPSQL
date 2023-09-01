@@ -508,7 +508,7 @@ func saveUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO userpicks (id, username, gameid, pickwinner) VALUES (UUID(), ?, ?, ?)`)
+	stmt, err := db.Prepare(`INSERT INTO userpicks (id, username, gameid, pickwinner) VALUES (UUID(), ?, ?, ?) ON DUPLICATE KEY UPDATE pickwinner = VALUES(pickwinner)`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
