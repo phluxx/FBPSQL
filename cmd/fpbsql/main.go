@@ -326,7 +326,7 @@ func saveUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, err := db.Prepare(`INSERT INTO usertiebreakers (id, qid, username, response) VALUES (UUID(), ?, ?, ?)`)
+	stmt, err := db.Prepare(`INSERT INTO usertiebreakers (id, qid, username, response) VALUES (UUID(), ?, ?, ?) ON DUPLICATE KEY UPDATE response = VALUES(response)`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
