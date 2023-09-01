@@ -651,7 +651,7 @@ func getUserTiebreakerHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "No tiebreaker found for the given username and date", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "Server error", http.StatusInternalServerError)
+		http.Error(w, "Server error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -664,23 +664,48 @@ func getUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 	username := vars["decodedUsername"]
 	date := vars["nextSaturday"]
 
-	rows, err := db.Query("SELECT username, gameid, pickwinner FROM userpicks WHERE username=? AND date=?", username, date)
+	// SQL query that joins the userpicks table with the games table based on game ID and filters by date
+	query := `
+        SELECT 
+            userpicks.id, userpicks.username, userpicks.gameid, userpicks.pickwinner 
+        FROM 
+            userpicks 
+        JOIN 
+            games ON userpicks.gameid = games.id 
+        WHERE 
+            userpicks.username = ? AND games.date = ?
+    `
+
+	rows, err := db.Query(query, username, date)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var picks userPickPayload
-	picks.Picks = make(map[string]string)
-
+	var picks []userPickPayload
 	for rows.Next() {
-		var gameID, pickWinner string
-		if err := rows.Scan(&picks.Username, &gameID, &pickWinner); err != nil {
+		var pick struct {
+			ID         string `json:"id"`
+			Username   string `json:"username"`
+			GameID     string `json:"gameId"`
+			PickWinner string `json:"pickWinner"`
+		}
+
+		if err := rows.Scan(&pick.ID, &pick.Username, &pick.GameID, &pick.PickWinner); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		picks.Picks[gameID] = pickWinner
+
+		// Map the results to the expected payload
+		payload := userPickPayload{
+			Username: pick.Username,
+			Picks: map[string]string{
+				pick.GameID: pick.PickWinner,
+			},
+		}
+
+		picks = append(picks, payload)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
