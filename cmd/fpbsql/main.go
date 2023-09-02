@@ -107,6 +107,7 @@ func main() {
 	r.HandleFunc("/api/register", registerHandler).Methods("POST")
 	r.HandleFunc("/api/getusertiebreaker/{decodedUsername}/{nextSaturday}", getUserTiebreakerHandler).Methods("GET")
 	r.HandleFunc("/api/getuserpicks/{decodedUsername}/{nextSaturday}", getUserPicksHandler).Methods("GET")
+	r.HandleFunc("/api/getuniqueusernames", getUniqueUsernamesHandler).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://pool.ewnix.net"},
@@ -720,4 +721,30 @@ func getUserPicksHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(picks)
+}
+
+func getUniqueUsernamesHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`SELECT DISTINCT username FROM userpicks`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var usernames []string
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		usernames = append(usernames, username)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(usernames)
 }
